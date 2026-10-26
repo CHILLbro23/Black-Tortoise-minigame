@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minigame Huyền Vũ - Increased Note Spacing</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #0f1015;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 15px;
+      overflow-x: hidden;
+      user-select: none;
+    }
+
+    /* Viền màn hình nhấp nháy đỏ khi dính bẫy/bấm sai */
+    #screen-flash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      box-shadow: inset 0 0 90px 30px rgba(231, 76, 60, 0.95);
+      opacity: 0;
+      transition: opacity 0.1s ease-out;
+      z-index: 9999;
+    }
+    #screen-flash.active { opacity: 1; }
+
+    /* Container chính */
+    .trainer-card {
+      background: #181922;
+      border: 2px solid #2e3040;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 780px;
+      box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+      text-align: center;
+    }
+
+    h2 { color: #2ecc71; text-shadow: 0 0 12px rgba(46,204,113,0.4); font-size: 26px; margin-bottom: 4px; }
+    .subtitle { font-size: 14px; color: #aaa; margin-bottom: 16px; }
+
+    /* Chú thích */
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      background: #111218;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #2b2d3d;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .box-white { width: 16px; height: 16px; background: #ffffff; border-radius: 3px; box-shadow: 0 0 6px #fff; }
+    .box-red { width: 16px; height: 16px; background: #e74c3c; border-radius: 3px; }
+    .box-empty { width: 16px; height: 16px; background: #222431; border: 1px solid #555; border-radius: 3px; }
+
+    /* Thanh máu */
+    .bar-section { margin-bottom: 14px; text-align: left; }
+    .bar-label { font-weight: bold; font-size: 15px; margin-bottom: 5px; display: flex; justify-content: space-between; }
+    .bar-container {
+      background: #222431;
+      height: 24px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #3a3d52;
+    }
+    .bar-fill { height: 100%; width: 100%; transition: width 0.15s ease-out; }
+    #boss-bar { background: linear-gradient(90deg, #27ae60, #2ecc71); }
+    #player-bar { background: linear-gradient(90deg, #2980b9, #3498db); }
+
+    /* KHUNG SÂN CHƠI 3 LANES (Chiều cao 460px) */
+    .rhythm-arena {
+      position: relative;
+      width: 100%;
+      height: 460px;
+      background: #111218;
+      border: 3px solid #3a3d52;
+      border-radius: 12px;
+      margin: 18px 0;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .lane {
+      flex: 1;
+      border-right: 2px dashed #2c2e3f;
+      position: relative;
+      cursor: pointer;
+    }
+    .lane:last-child { border-right: none; }
+    .lane:hover { background: rgba(255,255,255,0.02); }
+
+    /* VẠCH ĐÍCH MÀU XANH (Cao 90px) */
+    .hit-line {
+      position: absolute;
+      bottom: 25px;
+      left: 0;
+      width: 100%;
+      height: 90px;
+      background: rgba(46, 204, 113, 0.22);
+      border-top: 3px solid #2ecc71;
+      border-bottom: 3px solid #2ecc71;
+      pointer-events: none;
+      z-index: 5;
+      box-shadow: 0 0 18px rgba(46, 204, 113, 0.35);
+    }
+
+    /* Nhãn Phím bấm (A - S - D) */
+    .lane-key {
+      position: absolute;
+      bottom: 4px;
+      width: 100%;
+      text-align: center;
+      font-weight: bold;
+      font-size: 18px;
+      color: #ffca28;
+      z-index: 6;
+      pointer-events: none;
+    }
+
+    /* KHỐI CHẠY (94% lane width, height 85px) */
+    .note {
+      position: absolute;
+      width: 94%;
+      left: 3%;
+      height: 85px;
+      border-radius: 8px;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
+    .note-white {
+      background: #ffffff;
+      border: 3px solid #e0e0e0;
+      box-shadow: 0 0 16px rgba(255,255,255,0.95);
+    }
+    .note-red {
+      background: #e74c3c;
+      border: 3px solid #ff6b6b;
+      box-shadow: 0 0 16px rgba(231,76,60,0.95);
+    }
+
+    /* Thống kê & Phản hồi */
+    #feedback {
+      height: 32px;
+      font-size: 17px;
+      font-weight: bold;
+      margin: 12px 0;
+    }
+    .perfect { color: #2ecc71; }
+    .miss-red { color: #e74c3c; }
+    .miss-outer { color: #f39c12; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      background: #111218;
+      padding: 14px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      border: 1px solid #222431;
+    }
+    .stat-box { display: flex; flex-direction: column; }
+    .stat-val { font-size: 20px; font-weight: bold; color: #fff; margin-top: 2px; }
+
+    .diff-selector { display: flex; justify-content: center; gap: 10px; margin-top: 6px; }
+    .diff-btn { padding: 8px 16px; font-size: 13px; background: #222431; color: #aaa; border: 1px solid #3a3d52; border-radius: 4px; cursor: pointer; }
+    .diff-btn.active { background: #2ecc71; color: #121216; border-color: #2ecc71; font-weight: bold; }
+
+    .instructions { font-size: 13px; color: #777; margin-top: 16px; }
+    kbd { background: #2a2a35; padding: 3px 7px; border-radius: 4px; color: #ccc; border: 1px solid #444; }
+  </style>
+</head>
+<body>
+
+<div id="screen-flash"></div>
+
+<div class="trainer-card">
+  <h2>🐢 Minigame Huyền Vũ (35,000 HP)</h2>
+  <div class="subtitle">Khối Trắng CHẠM vạch Xanh = Gây 30 ST & Regen +50 HP!</div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="box-white"></div> <span>Khối Trắng: -30 HP Boss & Regen +50 HP</span></div>
+    <div class="legend-item"><div class="box-red"></div> <span>Khối Đỏ: Trừ -300 HP</span></div>
+    <div class="legend-item"><div class="box-empty"></div> <span>Hụt/Bỏ sót: Trừ -150 HP</span></div>
+  </div>
+
+  <!-- Thanh máu Boss & Người chơi -->
+  <div class="bar-section">
+    <div class="bar-label"><span>🐢 Máu Huyền Vũ</span> <span id="boss-hp-text">35,000 / 35,000</span></div>
+    <div class="bar-container"><div id="boss-bar" class="bar-fill"></div></div>
+  </div>
+
+  <div class="bar-section">
+    <div class="bar-label"><span>🛡️ Máu Người Chơi</span> <span id="player-hp-text">3,000 / 3,000</span></div>
+    <div class="bar-container"><div id="player-bar" class="bar-fill"></div></div>
+  </div>
+
+  <!-- Sân chơi 3 Làn (A - S - D) Dài 460px -->
+  <div class="rhythm-arena" id="arena">
+    <div class="hit-line"></div>
+
+    <div class="lane" onclick="handleLaneInput(0)">
+      <div class="lane-key">A</div>
+    </div>
+    <div class="lane" onclick="handleLaneInput(1)">
+      <div class="lane-key">S</div>
+    </div>
+    <div class="lane" onclick="handleLaneInput(2)">
+      <div class="lane-key">D</div>
+    </div>
+  </div>
+
+  <div id="feedback">Dùng A - S - D hoặc chạm khi khối trắng CHẠM vạch xanh!</div>
+
+  <!-- Thống kê -->
+  <div class="stats-grid">
+    <div class="stat-box"><span>Chuỗi Combo</span><span id="stat-combo" class="stat-val">0</span></div>
+    <div class="stat-box"><span>Độ Chính Xác</span><span id="stat-acc" class="stat-val">100%</span></div>
+    <div class="stat-box"><span>Trúng / Thất Bại</span><span id="stat-hits" class="stat-val">0 / 0</span></div>
+  </div>
+
+  <!-- Độ khó -->
+  <div class="diff-selector">
+    <button class="diff-btn active" onclick="setDifficulty('easy', this)">Dễ</button>
+    <button class="diff-btn" onclick="setDifficulty('medium', this)">Thường</button>
+    <button class="diff-btn" onclick="setDifficulty('hard', this)">Khó</button>
+    <button class="diff-btn" onclick="setDifficulty('extreme', this)">Ác Mộng</button>
+  </div>
+
+  <div class="instructions">
+    Phím bấm: <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> = Căn nốt rơi | <kbd>R</kbd> = Chơi lại
+  </div>
+</div>
+
+<script>
+  let maxBossHP = 35000, bossHP = maxBossHP;
+  let maxPlayerHP = 3000, playerHP = maxPlayerHP;
+
+  let notes = [];
+  let noteSpeed = 3.6;
+  let spawnInterval = 550; // Khoảng thời gian giãn cách giữa các khối (ms)
+  let redNoteRatio = 0.28;
+
+  let combo = 0;
+  let totalInputs = 0, whiteHits = 0, failHits = 0;
+  let isGameOver = false;
+  let lastTimestamp = 0;
+  let spawnTimer = 0;
+  let audioCtx = null;
+
+  const lanes = document.querySelectorAll('.lane');
+  
+  const hitZoneTop = 345;
+  const hitZoneBottom = 435;
+  const noteHeight = 85;
+
+  function isNoteTouchingGreenZone(noteY) {
+    const noteBottom = noteY + noteHeight;
+    return (noteBottom >= hitZoneTop && noteY <= hitZoneBottom);
+  }
+
+  function triggerRedFlash() {
+    const flash = document.getElementById('screen-flash');
+    flash.classList.add('active');
+    setTimeout(() => { flash.classList.remove('active'); }, 250);
+  }
+
+  function playSound(type) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+    if (type === 'hit') {
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.12);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+      osc.start(now); osc.stop(now + 0.15);
+    } else if (type === 'trap') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.linearRampToValueAtTime(60, now + 0.25);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+      osc.start(now); osc.stop(now + 0.25);
+    }
+  }
+
+  function spawnNote() {
+    const laneIndex = Math.floor(Math.random() * 3);
+    const isRed = Math.random() < redNoteRatio;
+    
+    const noteEl = document.createElement('div');
+    noteEl.className = 'note ' + (isRed ? 'note-red' : 'note-white');
+    noteEl.style.top = '-90px';
+    
+    lanes[laneIndex].appendChild(noteEl);
+
+    notes.push({
+      element: noteEl,
+      lane: laneIndex,
+      y: -90,
+      isRed: isRed,
+      hit: false
+    });
+  }
+
+  function gameLoop(timestamp) {
+    if (!lastTimestamp) lastTimestamp = timestamp;
+    let deltaTime = timestamp - lastTimestamp;
+    lastTimestamp = timestamp;
+
+    if (!isGameOver && bossHP > 0 && playerHP > 0) {
+      spawnTimer += deltaTime;
+      if (spawnTimer >= spawnInterval) {
+        spawnTimer = 0;
+        spawnNote();
+      }
+
+      for (let i = notes.length - 1; i >= 0; i--) {
+        let note = notes[i];
+        note.y += noteSpeed;
+        note.element.style.top = note.y + 'px';
+
+        if (note.y > 460) {
+          if (!note.hit && !note.isRed) {
+            failHits++;
+            combo = 0;
+            playerHP = Math.max(0, playerHP - 150);
+            
+            const feedbackEl = document.getElementById('feedback');
+            feedbackEl.className = 'miss-outer';
+            feedbackEl.innerText = `❌ BỎ SÓT KHỐI TRẮNG! Bị trừ -150 HP!`;
+            
+            triggerRedFlash();
+            playSound('trap');
+            updateUI();
+          }
+          
+          note.element.remove();
+          notes.splice(i, 1);
+        }
+      }
+    }
+
+    requestAnimationFrame(gameLoop);
+  }
+  requestAnimationFrame(gameLoop);
+
+  function handleLaneInput(laneIndex) {
+    if (isGameOver || bossHP <= 0 || playerHP <= 0) return;
+    totalInputs++;
+
+    const feedbackEl = document.getElementById('feedback');
+    let hitFound = false;
+
+    for (let i = 0; i < notes.length; i++) {
+      let note = notes[i];
+      if (note.lane === laneIndex && !note.hit && isNoteTouchingGreenZone(note.y)) {
+        hitFound = true;
+        note.hit = true;
+        note.element.remove();
+        notes.splice(i, 1);
+
+        if (!note.isRed) {
+          whiteHits++;
+          combo++;
+          let damage = 30;
+          let regen = 50;
+          
+          bossHP = Math.max(0, bossHP - damage);
+          playerHP = Math.min(maxPlayerHP, playerHP + regen);
+
+          feedbackEl.className = 'perfect';
+          feedbackEl.innerText = `💥 TRÚNG KHỐI TRẮNG! -${damage} HP Boss | Regen +${regen} HP! (Combo x${combo})`;
+          playSound('hit');
+        } else {
+          failHits++;
+          combo = 0;
+          playerHP = Math.max(0, playerHP - 300);
+
+          feedbackEl.className = 'miss-red';
+          feedbackEl.innerText = `🛑 BẤM NHẦM KHỐI BẪY ĐỎ! Bạn bị trừ -300 HP!`;
+          triggerRedFlash();
+          playSound('trap');
+        }
+        break;
+      }
+    }
+
+    if (!hitFound) {
+      failHits++;
+      combo = 0;
+      playerHP = Math.max(0, playerHP - 150);
+
+      feedbackEl.className = 'miss-outer';
+      feedbackEl.innerText = `⚠️ BẤM HỤT Ô TRỐNG! Bạn bị trừ -150 HP!`;
+      triggerRedFlash();
+      playSound('trap');
+    }
+
+    updateUI();
+  }
+
+  function setDifficulty(level, btnEl) {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+
+    if (level === 'easy') {
+      noteSpeed = 2.8; spawnInterval = 780; redNoteRatio = 0.22;
+    } else if (level === 'medium') {
+      noteSpeed = 3.6; spawnInterval = 650; redNoteRatio = 0.28;
+    } else if (level === 'hard') {
+      noteSpeed = 4.6; spawnInterval = 520; redNoteRatio = 0.35;
+    } else if (level === 'extreme') {
+      noteSpeed = 5.6; spawnInterval = 400; redNoteRatio = 0.42;
+    }
+  }
+
+  function updateUI() {
+    document.getElementById('boss-hp-text').innerText = `${bossHP.toLocaleString()} / ${maxBossHP.toLocaleString()}`;
+    document.getElementById('boss-bar').style.width = (bossHP / maxBossHP * 100) + '%';
+
+    document.getElementById('player-hp-text').innerText = `${playerHP.toLocaleString()} / ${maxPlayerHP.toLocaleString()}`;
+    document.getElementById('player-bar').style.width = (playerHP / maxPlayerHP * 100) + '%';
+
+    document.getElementById('stat-combo').innerText = combo;
+    document.getElementById('stat-hits').innerText = `${whiteHits} / ${failHits}`;
+
+    let accuracy = totalInputs > 0 ? Math.round((whiteHits / totalInputs) * 100) : 100;
+    document.getElementById('stat-acc').innerText = accuracy + '%';
+
+    if (bossHP <= 0) {
+      isGameOver = true;
+      document.getElementById('feedback').innerText = "🏆 CHIẾN THẮNG! Bạn đã hạ gục Huyền Vũ 35,000 HP! Bấm 'R' để chơi lại.";
+      document.getElementById('feedback').className = 'perfect';
+    } else if (playerHP <= 0) {
+      isGameOver = true;
+      document.getElementById('feedback').innerText = "💀 THẤT BẠI! Bạn đã bị tiêu diệt! Bấm 'R' để chơi lại.";
+      document.getElementById('feedback').className = 'miss-red';
+    }
+  }
+
+  function resetGame() {
+    notes.forEach(n => n.element.remove());
+    notes = [];
+    bossHP = maxBossHP;
+    playerHP = maxPlayerHP;
+    combo = 0; totalInputs = 0; whiteHits = 0; failHits = 0;
+    isGameOver = false;
+    document.getElementById('feedback').innerText = "Đã khởi động lại! Dùng A - S - D để bắt khối!";
+    document.getElementById('feedback').className = '';
+    updateUI();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    const key = e.key.toLowerCase();
+    if (key === 'a') handleLaneInput(0);
+    if (key === 's') handleLaneInput(1);
+    if (key === 'd') handleLaneInput(2);
+    if (key === 'r') resetGame();
+  });
+</script>
+
+</body>
+</html>
